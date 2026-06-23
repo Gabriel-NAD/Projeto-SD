@@ -1,0 +1,50 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: truco
+      POSTGRES_USER: truco
+      POSTGRES_PASSWORD: truco
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PG_HOST: postgres
+      PG_DB: truco
+      PG_USER: truco
+      PG_PASS: truco
+
+  broker:
+    build: ./broker
+    restart: unless-stopped
+    depends_on:
+      - redis
+      - postgres
+      - backend
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PG_HOST: postgres
+      PG_DB: truco
+      PG_USER: truco
+      PG_PASS: truco
+      BACKEND_HOST: backend
+      BACKEND_PORT: 5001
+    ports:
+      - "5000:5000"
+
+volumes:
+  pg_data:
