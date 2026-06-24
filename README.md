@@ -26,7 +26,8 @@ Jogo de Truco Paulista multiplayer em modo terminal, desenvolvido para a discipl
 ## Pré-requisitos
 
 - Docker e Docker Compose
-- Python 3.10+ (para rodar o cliente localmente)
+- Python 3.10+
+- `python3-venv` (Ubuntu/Debian: `sudo apt install python3-venv`)
 
 > **Observação (Windows):** o módulo `curses` não está disponível no Python padrão do Windows.
 > Para rodar o cliente em Windows, instale: `pip install windows-curses`
