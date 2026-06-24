@@ -132,6 +132,7 @@ def montar_estado_para(jogo, nome, sala_id, online=None):
         'mao_numero': jogo.mao_numero,
         'mao_valor': jogo.valor_mao,
         'valor_proposto': jogo.valor_proposto,
+        'dupla_pediu_truco': jogo.dupla_pediu_truco,
         'vira': carta_str(jogo.vira) if jogo.vira else None,
         'placar': [jogo.placar[0], jogo.placar[1]],
         'suas_cartas': suas_cartas,
@@ -338,6 +339,10 @@ def _pedir_truco(nome, sala_id):
         _salas[sala_id]['votos_correr'] = {}
         _salvar_jogo(sala_id)
 
+    # Envia estado atualizado (status='truco_pendente') para todos os clientes
+    # saberem que precisam responder ao truco
+    enviar_estado_todos(sala_id)
+
     broadcast(sala_id, {
         'tipo': 'decisao_pendente',
         'acao': 'truco',
@@ -422,6 +427,31 @@ def _votar_correr(nome, sala_id, voto):
 
             resultado = jogo.responder_truco(nome, 'correr')
             _salvar_jogo(sala_id)
+
+    enviar_estado_todos(sala_id)
+    _processar_resultado_acao(sala_id, resultado, jogo)
+
+
+def _correr_mao_de_11(nome, sala_id):
+    with _lock:
+        sala = _salas[sala_id]
+        jogo = sala['jogo']
+        if jogo is None or sala['status'] != 'jogando':
+            return
+
+    _cancelar_timer_turno(sala_id)
+    resultado = jogo.correr_mao_de_11(nome)
+
+    with _lock:
+        conn = _salas[sala_id]['conexoes'].get(nome)
+
+    if not resultado['ok']:
+        if conn:
+            enviar(conn, {'tipo': 'erro', 'mensagem': resultado['erro']})
+        return
+
+    with _lock:
+        _salvar_jogo(sala_id)
 
     enviar_estado_todos(sala_id)
     _processar_resultado_acao(sala_id, resultado, jogo)
@@ -706,6 +736,10 @@ def processar_mensagem(msg, nome, sala_id, conn):
     elif tipo == 'votar_correr':
         if sala_id:
             _votar_correr(nome, sala_id, bool(msg.get('voto', False)))
+
+    elif tipo == 'correr_mao_de_11':
+        if sala_id:
+            _correr_mao_de_11(nome, sala_id)
 
     elif tipo == 'chat':
         if sala_id:
