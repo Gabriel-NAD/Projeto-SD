@@ -3,6 +3,7 @@ import sys
 import os
 import json
 import time
+import socket
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -272,9 +273,19 @@ class TestMsgFimPartida:
         _processar(c, {'tipo': 'fim_partida', 'resultado': 'vitoria', 'motivo': 'pontos'})
         assert 'VITORIA' in c.status_msg
 
-    def test_mensagem_adicionada_ao_chat(self, c):
+    def test_motivo_no_status(self, c):
+        _processar(c, {'tipo': 'fim_partida', 'resultado': 'derrota', 'motivo': 'wo'})
+        assert 'wo' in c.status_msg
+
+    def test_chat_limpo_ao_fim_da_partida(self, c):
+        # Chat é por partida: mensagens não sobrevivem para a próxima
+        _processar(c, {'tipo': 'chat', 'de': 'Ana', 'mensagem': 'boa sorte!'})
+        _processar(c, {'tipo': 'aviso', 'mensagem': 'Truco pedido!'})
+        assert len(c.chat_msgs) == 2
+
         _processar(c, {'tipo': 'fim_partida', 'resultado': 'vitoria', 'motivo': 'pontos'})
-        assert any('Partida encerrada' in m for m in c.chat_msgs)
+
+        assert c.chat_msgs == []
 
 
 # ------------------------------------------------------------------ #
@@ -299,3 +310,194 @@ class TestProcessarFila:
         c._fila.put({'tipo': 'tipo_que_nao_existe', 'dados': 'x'})
         c.processar_fila()  # não deve lançar exceção
         assert c.status_msg == ''
+
+
+# ------------------------------------------------------------------ #
+#  Regressão: detecção de conexão perdida e reconexão                 #
+# ------------------------------------------------------------------ #
+
+class TestDeteccaoDesconexao:
+    def test_receber_marca_desconectado_quando_socket_cai(self, c):
+        local, remoto = socket.socketpair()
+        c.conn = local
+        c.tela = 'jogo'
+        remoto.close()  # simula o broker fechando a conexão
+
+        c._receber()  # recv retorna EOF imediatamente, thread encerra sozinha
+
+        assert c.conectado is False
+        assert c.tela == 'desconectado'
+        local.close()
+
+    def test_receber_nao_muda_tela_durante_login(self, c):
+        local, remoto = socket.socketpair()
+        c.conn = local
+        c.tela = 'login'
+        remoto.close()
+
+        c._receber()
+
+        assert c.conectado is False
+        assert c.tela == 'login'
+        local.close()
+
+    def test_receber_no_lobby_tambem_vai_para_desconectado(self, c):
+        local, remoto = socket.socketpair()
+        c.conn = local
+        c.tela = 'lobby'
+        remoto.close()
+
+        c._receber()
+
+        assert c.conectado is False
+        assert c.tela == 'desconectado'
+        local.close()
+
+
+class TestReconectar:
+    def test_reconectar_fecha_conexao_antiga_e_reseta_estado(self, c, monkeypatch):
+        local, remoto = socket.socketpair()
+        c.conn = local
+        c.estado_jogo = {'foo': 'bar'}
+        c.status_msg = '[ERRO] antigo'
+
+        chamado = {}
+        def fake_conectar():
+            chamado['ok'] = True
+            c.conectado = True
+        monkeypatch.setattr(c, 'conectar', fake_conectar)
+
+        c.reconectar()
+
+        assert chamado.get('ok') is True
+        assert c.estado_jogo is None
+        assert c.status_msg == ''
+        # Sem credenciais salvas: volta para o início
+        assert c.tela == 'inicio'
+        with pytest.raises(OSError):
+            local.send(b'x')  # conexão antiga deve ter sido fechada
+        remoto.close()
+
+    def test_reconectar_trata_falha_de_conexao(self, c, monkeypatch):
+        def fake_conectar():
+            raise OSError('recusado')
+        monkeypatch.setattr(c, 'conectar', fake_conectar)
+
+        c.reconectar()
+
+        assert c.conectado is False
+        assert '[ERRO]' in c.status_msg
+        assert c.tela == 'desconectado'
+
+    def test_reabrir_conexao_nao_mexe_na_tela(self, c, monkeypatch):
+        c.tela = 'jogo'
+        monkeypatch.setattr(c, 'conectar', lambda: None)
+
+        c._reabrir_conexao()
+
+        # _reabrir_conexao() não decide tela; quem decide é reconectar()
+        assert c.tela == 'jogo'
+
+    def test_reconectar_reloga_e_volta_para_partida(self, c, monkeypatch):
+        monkeypatch.setattr(c, 'conectar', lambda: None)
+        c.nome, c.senha, c.sala_id = 'Ana', '123', 3
+        c.tela = 'desconectado'
+
+        def fake_enviar(msg):
+            if msg['tipo'] == 'login':
+                c._fila.put({'tipo': 'ok', 'mensagem': 'Bem-vindo, Ana!', 'token': 'abc'})
+            elif msg['tipo'] == 'entrar_sala':
+                c._fila.put({'tipo': 'ok', 'mensagem': 'Reconectado!'})
+                c._fila.put({'tipo': 'estado_jogo', 'dados': {'sala': 3}})
+        monkeypatch.setattr(c, 'enviar', fake_enviar)
+
+        c.reconectar()
+
+        assert c.tela == 'jogo'
+        assert c.sala_id == 3
+
+    def test_reconectar_sem_sala_fica_no_lobby(self, c, monkeypatch):
+        monkeypatch.setattr(c, 'conectar', lambda: None)
+        c.nome, c.senha, c.sala_id = 'Ana', '123', None
+        c.tela = 'desconectado'
+
+        def fake_enviar(msg):
+            if msg['tipo'] == 'login':
+                c._fila.put({'tipo': 'ok', 'mensagem': 'Bem-vindo, Ana!', 'token': 'abc'})
+        monkeypatch.setattr(c, 'enviar', fake_enviar)
+
+        c.reconectar()
+
+        assert c.tela == 'lobby'
+
+    def test_reconectar_com_reconexao_ja_usada_cai_no_lobby(self, c, monkeypatch):
+        monkeypatch.setattr(c, 'conectar', lambda: None)
+        c.nome, c.senha, c.sala_id = 'Ana', '123', 3
+        c.tela = 'desconectado'
+
+        def fake_enviar(msg):
+            if msg['tipo'] == 'login':
+                c._fila.put({'tipo': 'ok', 'mensagem': 'Bem-vindo, Ana!', 'token': 'abc'})
+            elif msg['tipo'] == 'entrar_sala':
+                c._fila.put({'tipo': 'erro', 'mensagem': 'Reconexão já utilizada nesta partida'})
+        monkeypatch.setattr(c, 'enviar', fake_enviar)
+
+        c.reconectar()
+
+        assert c.tela == 'lobby'
+        assert c.sala_id is None
+        assert '[ERRO]' in c.status_msg
+
+    def test_reconectar_com_sala_reiniciada_vai_para_espera(self, c, monkeypatch):
+        monkeypatch.setattr(c, 'conectar', lambda: None)
+        c.nome, c.senha, c.sala_id = 'Ana', '123', 3
+        c.tela = 'desconectado'
+        c.chat_msgs = ['Ana: mensagem da partida anterior']
+
+        def fake_enviar(msg):
+            if msg['tipo'] == 'login':
+                c._fila.put({'tipo': 'ok', 'mensagem': 'Bem-vindo, Ana!', 'token': 'abc'})
+            elif msg['tipo'] == 'entrar_sala':
+                # Partida acabou enquanto desconectado: entrou como novo
+                c._fila.put({'tipo': 'ok', 'mensagem': 'Entrou na Sala 3'})
+        monkeypatch.setattr(c, 'enviar', fake_enviar)
+
+        c.reconectar()
+
+        assert c.tela == 'espera_sala'
+        assert c.sala_id == 3
+        assert c.chat_msgs == []  # partida nova: chat limpo
+
+    def test_reconectar_na_mesma_partida_mantem_chat(self, c, monkeypatch):
+        monkeypatch.setattr(c, 'conectar', lambda: None)
+        c.nome, c.senha, c.sala_id = 'Ana', '123', 3
+        c.tela = 'desconectado'
+        c.chat_msgs = ['Bob: boa sorte!']
+
+        def fake_enviar(msg):
+            if msg['tipo'] == 'login':
+                c._fila.put({'tipo': 'ok', 'mensagem': 'Bem-vindo, Ana!', 'token': 'abc'})
+            elif msg['tipo'] == 'entrar_sala':
+                c._fila.put({'tipo': 'ok', 'mensagem': 'Reconectado!'})
+                c._fila.put({'tipo': 'estado_jogo', 'dados': {'sala': 3}})
+        monkeypatch.setattr(c, 'enviar', fake_enviar)
+
+        c.reconectar()
+
+        assert c.tela == 'jogo'
+        assert 'Bob: boa sorte!' in c.chat_msgs  # mesma partida: chat preservado
+
+    def test_reconectar_com_login_invalido_volta_para_desconectado(self, c, monkeypatch):
+        monkeypatch.setattr(c, 'conectar', lambda: None)
+        c.nome, c.senha, c.sala_id = 'Ana', 'senha_trocada', 3
+        c.tela = 'desconectado'
+
+        def fake_enviar(msg):
+            if msg['tipo'] == 'login':
+                c._fila.put({'tipo': 'erro', 'mensagem': 'Usuário ou senha inválidos'})
+        monkeypatch.setattr(c, 'enviar', fake_enviar)
+
+        c.reconectar()
+
+        assert c.tela == 'desconectado'
+        assert '[ERRO]' in c.status_msg

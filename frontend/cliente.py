@@ -18,6 +18,7 @@ class Cliente:
     def __init__(self):
         self.conn       = None
         self.nome       = None
+        self.senha      = None
         self.sala_id    = None
         self.tela       = 'inicio'
 
@@ -32,13 +33,91 @@ class Cliente:
         self.timer_inicio  = 0.0
         self.timer_jogador = ''
 
-        self._fila  = queue.Queue()
-        self._ativo = True
+        self._fila    = queue.Queue()
+        self._ativo   = True
+        self.conectado = True
 
     def conectar(self):
         self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.conn.connect((BROKER_HOST, BROKER_PORT))
+        self.conectado = True
         threading.Thread(target=self._receber, daemon=True).start()
+
+    def _reabrir_conexao(self):
+        """Fecha a conexão antiga (se houver) e abre uma nova com o broker."""
+        if self.conn:
+            try:
+                self.conn.close()
+            except OSError:
+                pass
+        self.status_msg  = ''
+        self.estado_jogo = None
+        self.conectar()
+
+    def reconectar(self):
+        """Rota padrão de reconexão: reabre a conexão com o broker e,
+        com as credenciais salvas, reloga e volta para onde estava
+        (partida em andamento, sala de espera ou lobby)."""
+        try:
+            self._reabrir_conexao()
+        except OSError:
+            self.conectado = False
+            self.status_msg = '[ERRO] Nao foi possivel reconectar ao broker'
+            self.tela = 'desconectado'
+            return
+
+        if not (self.nome and self.senha):
+            # Sem credenciais salvas: volta para o início
+            self.tela = 'inicio'
+            return
+
+        self.enviar({'tipo': 'login', 'nome': self.nome, 'senha': self.senha})
+        if not self._aguardar_tela('lobby'):
+            self.tela = 'desconectado'
+            if '[ERRO]' not in self.status_msg:
+                self.status_msg = '[ERRO] Falha ao relogar no servidor'
+            return
+
+        if not self.sala_id:
+            return  # não estava em sala: fica no lobby
+
+        # Tenta voltar para a sala em que estava
+        sala_num = self.sala_id
+        self.status_msg = ''
+        self.enviar({'tipo': 'entrar_sala', 'sala': sala_num})
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            self.processar_fila()
+            if self.tela == 'jogo':
+                return  # reconectou na partida
+            if '[ERRO]' in self.status_msg:
+                # Não deu para voltar (ex: reconexão já usada, partida
+                # encerrada por W.O.): segue para o lobby com o motivo
+                self.sala_id = None
+                self.tela = 'lobby'
+                return
+            if 'Entrou' in self.status_msg:
+                # Partida acabou enquanto desconectado e a sala foi
+                # reiniciada: entrou como jogador novo, aguarda início
+                self.chat_msgs = []   # partida nova, chat limpo
+                self.tela = 'espera_sala'
+                return
+            time.sleep(0.1)
+
+        self.sala_id = None
+        self.tela = 'lobby'
+
+    def _aguardar_tela(self, alvo, timeout=5):
+        """Processa a fila até a tela mudar para `alvo` ou dar erro/timeout."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            self.processar_fila()
+            if self.tela == alvo:
+                return True
+            if '[ERRO]' in self.status_msg:
+                return False
+            time.sleep(0.1)
+        return False
 
     def enviar(self, msg):
         if self.conn:
@@ -67,6 +146,12 @@ class Cliente:
                         self._fila.put(json.loads(linha))
                     except json.JSONDecodeError:
                         pass
+
+        self.conectado = False
+        # Rota padrão de desconexão: uma única tela decide entre
+        # reconectar ou sair, independente de onde a queda ocorreu.
+        if self.tela not in ('inicio', 'login', 'cadastro'):
+            self.tela = 'desconectado'
 
     def processar_fila(self):
         mudou = False
@@ -130,8 +215,8 @@ class Cliente:
         elif tipo == 'fim_partida':
             resultado = msg.get('resultado', '').upper()
             motivo    = msg.get('motivo', '')
-            self._add_chat(f">>> Partida encerrada: {resultado} ({motivo})")
-            self.status_msg  = f"Partida encerrada: {resultado}"
+            self.chat_msgs   = []   # chat existe apenas durante a partida
+            self.status_msg  = f"Partida encerrada: {resultado} ({motivo})"
             self.estado_jogo = None
             self.sala_id     = None
             self.tela        = 'lobby'
@@ -261,7 +346,8 @@ def tela_login(stdscr, cliente):
         cliente.tela = 'inicio'
         return True
 
-    cliente.nome = nome
+    cliente.nome  = nome
+    cliente.senha = senha
     cliente.enviar({'tipo': 'login', 'nome': nome, 'senha': senha})
 
     _put(stdscr, 10, 4, 'Aguardando...')
@@ -454,6 +540,7 @@ def tela_salas(stdscr, cliente):
 
             if 1 <= sala_num <= 16:
                 cliente.status_msg = ''
+                cliente.chat_msgs  = []   # chat começa limpo a cada partida
                 cliente.enviar({'tipo': 'entrar_sala', 'sala': sala_num})
                 cliente.sala_id = sala_num
 
@@ -780,6 +867,35 @@ def tela_jogo(stdscr, cliente):
 
 
 # ------------------------------------------------------------------ #
+#  Tela: conexão perdida                                              #
+# ------------------------------------------------------------------ #
+
+def tela_desconectado(stdscr, cliente):
+    stdscr.clear()
+    _centralizar(stdscr, 3, ' CONEXAO PERDIDA ', curses.A_BOLD | curses.A_REVERSE)
+    _centralizar(stdscr, 5, 'A conexao com o servidor foi encerrada.')
+    if cliente.sala_id:
+        _centralizar(stdscr, 6, f'Havia uma partida em andamento na Sala {cliente.sala_id}.')
+    _centralizar(stdscr, 8, '[R] Reconectar   [S] Sair')
+    if cliente.status_msg:
+        _centralizar(stdscr, 10, cliente.status_msg)
+    stdscr.refresh()
+
+    stdscr.timeout(-1)
+    ch = stdscr.getch()
+    stdscr.timeout(100)
+
+    if ch in (ord('s'), ord('S')):
+        return False
+    if ch in (ord('r'), ord('R')):
+        stdscr.clear()
+        _centralizar(stdscr, 5, 'Reconectando...')
+        stdscr.refresh()
+        cliente.reconectar()
+    return True
+
+
+# ------------------------------------------------------------------ #
 #  Loop principal                                                     #
 # ------------------------------------------------------------------ #
 
@@ -826,6 +942,8 @@ def main(stdscr):
             tela_ranking(stdscr, cliente)
         elif tela == 'jogo':
             tela_jogo(stdscr, cliente)
+        elif tela == 'desconectado':
+            rodando = tela_desconectado(stdscr, cliente)
 
     cliente.fechar()
 
