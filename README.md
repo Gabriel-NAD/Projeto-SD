@@ -1,16 +1,16 @@
 # Truco Paulista Distribuído
 
-Jogo de Truco Paulista multiplayer em modo terminal, desenvolvido para a disciplina de Sistemas Distribuídos — UTFPR Campus Campo Mourão.
+Jogo de Truco Paulista multiplayer com interface gráfica em `pygame`, desenvolvido para a disciplina de Sistemas Distribuídos — UTFPR Campus Campo Mourão.
 
 ## Arquitetura
 
 ```
-[Cliente curses]  ──TCP:5000──►  [Broker]  ──TCP:5001──►  [Backend]
+[Cliente pygame]  ──TCP:5000──►  [Broker]  ──TCP:5001──►  [Backend]
                                      │                         │
                                   [Redis]               [PostgreSQL]
 ```
 
-- **Frontend** (`frontend/cliente.py`): interface terminal com `curses`, roda localmente.
+- **Frontend** (`frontend/interface.py` + `frontend/cliente.py`): interface gráfica com `pygame`, roda localmente. A comunicação com o servidor fica na classe `Cliente` (`cliente.py`) e as telas em `interface.py`.
 - **Broker** (`broker/broker.py`): autentica o cliente, mantém a sessão e repassa mensagens ao backend.
 - **Backend** (`backend/servidor.py`): lógica do jogo, gerencia salas e timers.
 - **Redis**: estado das sessões e das partidas em andamento (com TTL).
@@ -28,9 +28,7 @@ Jogo de Truco Paulista multiplayer em modo terminal, desenvolvido para a discipl
 - Docker e Docker Compose
 - Python 3.10+
 - `python3-venv` (Ubuntu/Debian: `sudo apt install python3-venv`)
-
-> **Observação (Windows):** o módulo `curses` não está disponível no Python padrão do Windows.
-> Para rodar o cliente em Windows, instale: `pip install windows-curses`
+- `pygame` para o cliente: `pip install pygame`
 
 ## Como rodar
 
@@ -80,4 +78,4 @@ make test
 python3 -m pytest backend/tests/ broker/tests/ frontend/tests/ -v
 ```
 
-232 testes cobrindo: lógica do jogo, Redis, PostgreSQL, servidor e broker.
+Testes cobrindo: lógica do jogo, Redis, PostgreSQL, servidor, broker e cliente.

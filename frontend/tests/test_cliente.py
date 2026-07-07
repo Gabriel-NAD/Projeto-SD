@@ -501,3 +501,37 @@ class TestReconectar:
 
         assert c.tela == 'desconectado'
         assert '[ERRO]' in c.status_msg
+
+
+# ------------------------------------------------------------------ #
+#  Interface pygame: mapeamento carta -> sprite                       #
+# ------------------------------------------------------------------ #
+
+from interface import arquivo_carta
+
+
+class TestArquivoCarta:
+    def test_carta_numerica(self):
+        assert arquivo_carta('7♥') == '7_of_hearts.png'
+        assert arquivo_carta('4♦') == '4_of_diamonds.png'
+
+    def test_as_vira_ace(self):
+        assert arquivo_carta('1♣') == 'ace_of_clubs.png'
+
+    def test_figuras(self):
+        assert arquivo_carta('Q♠') == 'queen_of_spades.png'
+        assert arquivo_carta('J♥') == 'jack_of_hearts.png'
+        assert arquivo_carta('K♦') == 'king_of_diamonds.png'
+
+    def test_coberta_e_invalidas_usam_verso(self):
+        assert arquivo_carta('????') == 'back.png'
+        assert arquivo_carta(None) == 'back.png'
+        assert arquivo_carta('') == 'back.png'
+
+    def test_todas_as_40_cartas_tem_sprite(self):
+        pasta = os.path.join(os.path.dirname(__file__), '..', 'assets', 'cartas')
+        for valor in ['1', '2', '3', '4', '5', '6', '7', 'Q', 'J', 'K']:
+            for naipe in ['♣', '♥', '♠', '♦']:
+                arq = arquivo_carta(valor + naipe)
+                assert os.path.exists(os.path.join(pasta, arq)), f'falta {arq}'
+        assert os.path.exists(os.path.join(pasta, 'back.png'))

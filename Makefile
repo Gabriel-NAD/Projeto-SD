@@ -15,6 +15,7 @@ $(SENTINEL):
 	$(PIP) install --quiet --upgrade pip
 	$(PIP) install --quiet -r backend/requirements.txt
 	$(PIP) install --quiet -r broker/requirements.txt
+	$(PIP) install --quiet -r frontend/requirements.txt
 	touch $(SENTINEL)
 
 test: venv
@@ -32,7 +33,7 @@ down:
 	docker compose down
 
 cliente:
-	python3 frontend/cliente.py
+	python3 frontend/interface.py
 
 logs:
 	docker compose logs -f

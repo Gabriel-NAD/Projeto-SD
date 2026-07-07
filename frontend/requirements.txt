@@ -1,1 +1,1 @@
-# sem dependencias externas - usa apenas stdlib
+pygame
