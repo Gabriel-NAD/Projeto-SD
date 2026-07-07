@@ -21,52 +21,52 @@ def r():
 
 class TestSessoes:
     def test_salvar_e_obter_sessao(self, r):
-        br.salvar_sessao(r, 'tok1', 'Ana')
+        br.salvar_sessao(r, 'tok1', 'Almodenga')
         sessao = br.obter_sessao(r, 'tok1')
-        assert sessao['nome'] == 'Ana'
+        assert sessao['nome'] == 'Almodenga'
         assert sessao['sala'] == ''
 
     def test_sessao_inexistente_retorna_none(self, r):
         assert br.obter_sessao(r, 'naoexiste') is None
 
     def test_sessao_existe(self, r):
-        br.salvar_sessao(r, 'tok1', 'Ana')
+        br.salvar_sessao(r, 'tok1', 'Almodenga')
         assert br.sessao_existe(r, 'tok1') is True
         assert br.sessao_existe(r, 'outro') is False
 
     def test_atualizar_sala(self, r):
-        br.salvar_sessao(r, 'tok1', 'Ana')
+        br.salvar_sessao(r, 'tok1', 'Almodenga')
         br.atualizar_sessao_sala(r, 'tok1', 3)
         sessao = br.obter_sessao(r, 'tok1')
         assert sessao['sala'] == '3'
 
     def test_atualizar_sala_para_lobby(self, r):
-        br.salvar_sessao(r, 'tok1', 'Ana')
+        br.salvar_sessao(r, 'tok1', 'Almodenga')
         br.atualizar_sessao_sala(r, 'tok1', 3)
         br.atualizar_sessao_sala(r, 'tok1', None)
         assert br.obter_sessao(r, 'tok1')['sala'] == ''
 
     def test_remover_sessao(self, r):
-        br.salvar_sessao(r, 'tok1', 'Ana')
-        br.remover_sessao(r, 'tok1', 'Ana')
+        br.salvar_sessao(r, 'tok1', 'Almodenga')
+        br.remover_sessao(r, 'tok1', 'Almodenga')
         assert br.obter_sessao(r, 'tok1') is None
 
     def test_token_por_nome(self, r):
-        br.salvar_sessao(r, 'tok1', 'Ana')
-        assert br.token_por_nome(r, 'Ana') == 'tok1'
+        br.salvar_sessao(r, 'tok1', 'Almodenga')
+        assert br.token_por_nome(r, 'Almodenga') == 'tok1'
 
     def test_token_por_nome_inexistente(self, r):
         assert br.token_por_nome(r, 'Ninguem') is None
 
     def test_remover_sessao_limpa_indice_reverso(self, r):
-        br.salvar_sessao(r, 'tok1', 'Ana')
-        br.remover_sessao(r, 'tok1', 'Ana')
-        assert br.token_por_nome(r, 'Ana') is None
+        br.salvar_sessao(r, 'tok1', 'Almodenga')
+        br.remover_sessao(r, 'tok1', 'Almodenga')
+        assert br.token_por_nome(r, 'Almodenga') is None
 
     def test_sobrescrever_sessao(self, r):
-        br.salvar_sessao(r, 'tok1', 'Ana')
-        br.salvar_sessao(r, 'tok2', 'Ana')
-        assert br.token_por_nome(r, 'Ana') == 'tok2'
+        br.salvar_sessao(r, 'tok1', 'Almodenga')
+        br.salvar_sessao(r, 'tok2', 'Almodenga')
+        assert br.token_por_nome(r, 'Almodenga') == 'tok2'
 
 
 # ------------------------------------------------------------------ #
@@ -75,45 +75,45 @@ class TestSessoes:
 
 class TestJogadoresSala:
     def test_entrar_e_listar(self, r):
-        br.entrar_sala(r, 1, 'Ana')
-        br.entrar_sala(r, 1, 'Bob')
+        br.entrar_sala(r, 1, 'Almodenga')
+        br.entrar_sala(r, 1, 'Baguga')
         jogadores = br.jogadores_na_sala(r, 1)
-        assert set(jogadores) == {'Ana', 'Bob'}
+        assert set(jogadores) == {'Almodenga', 'Baguga'}
 
     def test_sala_vazia(self, r):
         assert br.jogadores_na_sala(r, 1) == []
 
     def test_num_jogadores(self, r):
-        br.entrar_sala(r, 1, 'Ana')
-        br.entrar_sala(r, 1, 'Bob')
+        br.entrar_sala(r, 1, 'Almodenga')
+        br.entrar_sala(r, 1, 'Baguga')
         assert br.num_jogadores_na_sala(r, 1) == 2
 
     def test_sair_da_sala(self, r):
-        br.entrar_sala(r, 1, 'Ana')
-        br.entrar_sala(r, 1, 'Bob')
-        br.sair_sala(r, 1, 'Ana')
-        assert br.jogadores_na_sala(r, 1) == ['Bob']
+        br.entrar_sala(r, 1, 'Almodenga')
+        br.entrar_sala(r, 1, 'Baguga')
+        br.sair_sala(r, 1, 'Almodenga')
+        assert br.jogadores_na_sala(r, 1) == ['Baguga']
 
     def test_jogador_esta_na_sala(self, r):
-        br.entrar_sala(r, 1, 'Ana')
-        assert br.jogador_esta_na_sala(r, 1, 'Ana') is True
-        assert br.jogador_esta_na_sala(r, 1, 'Bob') is False
+        br.entrar_sala(r, 1, 'Almodenga')
+        assert br.jogador_esta_na_sala(r, 1, 'Almodenga') is True
+        assert br.jogador_esta_na_sala(r, 1, 'Baguga') is False
 
     def test_limpar_sala(self, r):
-        br.entrar_sala(r, 1, 'Ana')
-        br.entrar_sala(r, 1, 'Bob')
+        br.entrar_sala(r, 1, 'Almodenga')
+        br.entrar_sala(r, 1, 'Baguga')
         br.limpar_sala_jogadores(r, 1)
         assert br.jogadores_na_sala(r, 1) == []
 
     def test_salas_independentes(self, r):
-        br.entrar_sala(r, 1, 'Ana')
-        br.entrar_sala(r, 2, 'Bob')
-        assert br.jogadores_na_sala(r, 1) == ['Ana']
-        assert br.jogadores_na_sala(r, 2) == ['Bob']
+        br.entrar_sala(r, 1, 'Almodenga')
+        br.entrar_sala(r, 2, 'Baguga')
+        assert br.jogadores_na_sala(r, 1) == ['Almodenga']
+        assert br.jogadores_na_sala(r, 2) == ['Baguga']
 
     def test_mesmo_jogador_nao_duplica(self, r):
-        br.entrar_sala(r, 1, 'Ana')
-        br.entrar_sala(r, 1, 'Ana')
+        br.entrar_sala(r, 1, 'Almodenga')
+        br.entrar_sala(r, 1, 'Almodenga')
         assert br.num_jogadores_na_sala(r, 1) == 1
 
 
@@ -126,7 +126,7 @@ class TestEstadoJogo:
         return {
             'sala_id': 3,
             'tipo': 'normal',
-            'jogadores': ['Ana', 'Bob', 'Carlos', 'Dani'],
+            'jogadores': ['Almodenga', 'Baguga', 'CharlesHenrique', 'Dante(banidodoceuedoinforno)'],
             'placar': {'0': 6, '1': 3},
             'status': 'jogando',
         }
@@ -195,45 +195,45 @@ class TestEstadoJogo:
 
 class TestDesconexao:
     def test_registrar_desconexao(self, r):
-        br.registrar_desconexao(r, 'Ana', 3)
-        assert br.esta_desconectado(r, 'Ana') is True
+        br.registrar_desconexao(r, 'Almodenga', 3)
+        assert br.esta_desconectado(r, 'Almodenga') is True
 
     def test_nao_esta_desconectado(self, r):
-        assert br.esta_desconectado(r, 'Ana') is False
+        assert br.esta_desconectado(r, 'Almodenga') is False
 
     def test_obter_desconexao(self, r):
-        br.registrar_desconexao(r, 'Ana', 3)
-        info = br.obter_desconexao(r, 'Ana')
+        br.registrar_desconexao(r, 'Almodenga', 3)
+        info = br.obter_desconexao(r, 'Almodenga')
         assert info['sala'] == 3
         assert info['reconectou'] is False
 
     def test_obter_desconexao_inexistente(self, r):
-        assert br.obter_desconexao(r, 'Ana') is None
+        assert br.obter_desconexao(r, 'Almodenga') is None
 
     def test_marcar_reconectado(self, r):
-        br.registrar_desconexao(r, 'Ana', 3)
-        br.marcar_reconectado(r, 'Ana')
-        info = br.obter_desconexao(r, 'Ana')
+        br.registrar_desconexao(r, 'Almodenga', 3)
+        br.marcar_reconectado(r, 'Almodenga')
+        info = br.obter_desconexao(r, 'Almodenga')
         assert info['reconectou'] is True
 
     def test_marcar_reconectado_sem_desconexao_nao_falha(self, r):
         br.marcar_reconectado(r, 'Ninguem')  # não deve lançar exceção
 
     def test_remover_desconexao(self, r):
-        br.registrar_desconexao(r, 'Ana', 3)
-        br.remover_desconexao(r, 'Ana')
-        assert br.esta_desconectado(r, 'Ana') is False
+        br.registrar_desconexao(r, 'Almodenga', 3)
+        br.remover_desconexao(r, 'Almodenga')
+        assert br.esta_desconectado(r, 'Almodenga') is False
 
     def test_tempo_restante(self, r):
-        br.registrar_desconexao(r, 'Ana', 3)
-        tempo = br.tempo_restante_desconexao(r, 'Ana')
+        br.registrar_desconexao(r, 'Almodenga', 3)
+        tempo = br.tempo_restante_desconexao(r, 'Almodenga')
         assert 0 < tempo <= br.DESCONEXAO_TTL
 
     def test_tempo_restante_inexistente(self, r):
-        assert br.tempo_restante_desconexao(r, 'Ana') == -2
+        assert br.tempo_restante_desconexao(r, 'Almodenga') == -2
 
     def test_jogadores_diferentes_independentes(self, r):
-        br.registrar_desconexao(r, 'Ana', 3)
-        br.registrar_desconexao(r, 'Bob', 5)
-        assert br.obter_desconexao(r, 'Ana')['sala'] == 3
-        assert br.obter_desconexao(r, 'Bob')['sala'] == 5
+        br.registrar_desconexao(r, 'Almodenga', 3)
+        br.registrar_desconexao(r, 'Baguga', 5)
+        assert br.obter_desconexao(r, 'Almodenga')['sala'] == 3
+        assert br.obter_desconexao(r, 'Baguga')['sala'] == 5

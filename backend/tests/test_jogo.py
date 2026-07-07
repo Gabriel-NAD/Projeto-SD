@@ -107,20 +107,20 @@ class TestVencedorRodada:
         self.manilhas = determinar_manilhas(self.vira)
 
     def test_carta_mais_alta_vence(self):
-        jogadas = [('Ana', ('3', '♣')), ('Bob', ('2', '♣'))]
-        assert vencedor_rodada(jogadas, self.manilhas) == 'Ana'
+        jogadas = [('Almodenga', ('3', '♣')), ('Baguga', ('2', '♣'))]
+        assert vencedor_rodada(jogadas, self.manilhas) == 'Almodenga'
 
     def test_manilha_vence_carta_normal(self):
-        jogadas = [('Ana', ('3', '♣')), ('Bob', ('7', '♠'))]
-        assert vencedor_rodada(jogadas, self.manilhas) == 'Bob'
+        jogadas = [('Almodenga', ('3', '♣')), ('Baguga', ('7', '♠'))]
+        assert vencedor_rodada(jogadas, self.manilhas) == 'Baguga'
 
     def test_empate_retorna_none(self):
-        jogadas = [('Ana', ('3', '♣')), ('Bob', ('3', '♥'))]
+        jogadas = [('Almodenga', ('3', '♣')), ('Baguga', ('3', '♥'))]
         assert vencedor_rodada(jogadas, self.manilhas) is None
 
     def test_carta_coberta_perde(self):
-        jogadas = [('Ana', None), ('Bob', ('4', '♣'))]
-        assert vencedor_rodada(jogadas, self.manilhas) == 'Bob'
+        jogadas = [('Almodenga', None), ('Baguga', ('4', '♣'))]
+        assert vencedor_rodada(jogadas, self.manilhas) == 'Baguga'
 
     def test_quatro_jogadores(self):
         jogadas = [
@@ -142,27 +142,27 @@ class TestVencedorRodada:
 
 class TestVencedorMao:
     def setup_method(self):
-        # dupla 0: Ana, Carlos | dupla 1: Bob, Dani
-        self.duplas = {'Ana': 0, 'Bob': 1, 'Carlos': 0, 'Dani': 1}
+        # dupla 0: Almodenga, Charles | dupla 1: Baguga, Dante(banidodoceuedoinforno)
+        self.duplas = {'Almodenga': 0, 'Baguga': 1, 'Charles': 0, 'Dante(banidodoceuedoinforno)': 1}
 
     def test_vence_duas_rodadas(self):
-        resultados = ['Ana', 'Carlos']
+        resultados = ['Almodenga', 'Charles']
         assert vencedor_mao(resultados, self.duplas) == 0
 
     def test_adversario_vence_duas(self):
-        resultados = ['Bob', 'Dani']
+        resultados = ['Baguga', 'Dante(banidodoceuedoinforno)']
         assert vencedor_mao(resultados, self.duplas) == 1
 
     def test_empate_na_primeira_quem_vence_a_segunda_leva(self):
-        resultados = [None, 'Bob']
+        resultados = [None, 'Baguga']
         assert vencedor_mao(resultados, self.duplas) == 1
 
     def test_empate_na_segunda_quem_venceu_a_primeira_leva(self):
-        resultados = ['Ana', None]
+        resultados = ['Almodenga', None]
         assert vencedor_mao(resultados, self.duplas) == 0
 
     def test_empate_na_terceira_quem_venceu_a_primeira_leva(self):
-        resultados = ['Ana', 'Bob', None]
+        resultados = ['Almodenga', 'Baguga', None]
         assert vencedor_mao(resultados, self.duplas) == 0
 
     def test_todas_empatam_ninguem_ganha(self):
@@ -170,7 +170,7 @@ class TestVencedorMao:
         assert vencedor_mao(resultados, self.duplas) is None
 
     def test_mao_nao_encerrada(self):
-        resultados = ['Ana']
+        resultados = ['Almodenga']
         assert vencedor_mao(resultados, self.duplas) is None
 
 
@@ -192,24 +192,24 @@ class TestProximoValorTruco:
 # ------------------------------------------------------------------ #
 
 def _criar_jogo_normal():
-    return Jogo(sala_id=1, jogadores=['Ana', 'Bob', 'Carlos', 'Dani'], tipo='normal')
+    return Jogo(sala_id=1, jogadores=['Almodenga', 'Baguga', 'Charles', 'Dante(banidodoceuedoinforno)'], tipo='normal')
 
 def _criar_jogo_1v1():
-    return Jogo(sala_id=14, jogadores=['Ana', 'Bob'], tipo='1v1')
+    return Jogo(sala_id=14, jogadores=['Almodenga', 'Baguga'], tipo='1v1')
 
 
 class TestJogoInicializacao:
     def test_duplas_normais(self):
         j = _criar_jogo_normal()
-        assert j.duplas['Ana'] == 0
-        assert j.duplas['Bob'] == 1
-        assert j.duplas['Carlos'] == 0
-        assert j.duplas['Dani'] == 1
+        assert j.duplas['Almodenga'] == 0
+        assert j.duplas['Baguga'] == 1
+        assert j.duplas['Charles'] == 0
+        assert j.duplas['Dante(banidodoceuedoinforno)'] == 1
 
     def test_duplas_1v1(self):
         j = _criar_jogo_1v1()
-        assert j.duplas['Ana'] == 0
-        assert j.duplas['Bob'] == 1
+        assert j.duplas['Almodenga'] == 0
+        assert j.duplas['Baguga'] == 1
 
     def test_placar_inicial(self):
         j = _criar_jogo_normal()
@@ -268,7 +268,7 @@ class TestJogoJogarCarta:
         self.j.iniciar_mao()
 
     def test_nao_e_sua_vez(self):
-        res = self.j.jogar_carta('Bob', 0)
+        res = self.j.jogar_carta('Baguga', 0)
         assert res['ok'] is False
 
     def test_jogar_carta_valida(self):
@@ -304,65 +304,65 @@ class TestJogoTruco:
         self.j.iniciar_mao()
 
     def test_pedir_truco(self):
-        res = self.j.pedir_truco('Ana')
+        res = self.j.pedir_truco('Almodenga')
         assert res['ok'] is True
         assert res['valor_proposto'] == 3
         assert self.j.status == 'truco_pendente'
 
     def test_mesma_dupla_nao_pode_pedir_novamente(self):
-        self.j.pedir_truco('Ana')
-        res = self.j.pedir_truco('Carlos')
+        self.j.pedir_truco('Almodenga')
+        res = self.j.pedir_truco('Charles')
         assert res['ok'] is False
 
     def test_aceitar_truco(self):
-        self.j.pedir_truco('Ana')
-        res = self.j.responder_truco('Bob', 'aceitar')
+        self.j.pedir_truco('Almodenga')
+        res = self.j.responder_truco('Baguga', 'aceitar')
         assert res['ok'] is True
         assert self.j.valor_mao == 3
         assert self.j.status == 'jogando'
 
     def test_correr_do_truco(self):
-        self.j.pedir_truco('Ana')
-        res = self.j.responder_truco('Bob', 'correr')
+        self.j.pedir_truco('Almodenga')
+        res = self.j.responder_truco('Baguga', 'correr')
         assert res['ok'] is True
         assert res['pontos'] == 1  # valor atual antes do truco
-        assert self.j.placar[0] == 1  # dupla 0 (Ana) ganhou
+        assert self.j.placar[0] == 1  # dupla 0 (Almodenga) ganhou
 
     def test_aumentar_truco(self):
-        self.j.pedir_truco('Ana')
-        res = self.j.responder_truco('Bob', 'aumentar')
+        self.j.pedir_truco('Almodenga')
+        res = self.j.responder_truco('Baguga', 'aumentar')
         assert res['ok'] is True
         assert self.j.valor_mao == 3   # aceita o truco
         assert self.j.valor_proposto == 6
-        assert self.j.dupla_pediu_truco == 1  # dupla 1 (Bob) agora pediu
+        assert self.j.dupla_pediu_truco == 1  # dupla 1 (Baguga) agora pediu
 
     def test_sequencia_completa_truco(self):
         j = self.j
-        j.pedir_truco('Ana')        # propõe 3
-        j.responder_truco('Bob', 'aumentar')   # aceita 3, propõe 6
-        j.responder_truco('Ana', 'aumentar')   # aceita 6, propõe 9
-        j.responder_truco('Bob', 'aumentar')   # aceita 9, propõe 12
+        j.pedir_truco('Almodenga')        # propõe 3
+        j.responder_truco('Baguga', 'aumentar')   # aceita 3, propõe 6
+        j.responder_truco('Almodenga', 'aumentar')   # aceita 6, propõe 9
+        j.responder_truco('Baguga', 'aumentar')   # aceita 9, propõe 12
         assert j.valor_mao == 9
         assert j.valor_proposto == 12
-        res = j.responder_truco('Ana', 'aceitar')
+        res = j.responder_truco('Almodenga', 'aceitar')
         assert j.valor_mao == 12
 
     def test_nao_pode_aumentar_alem_de_12(self):
         j = self.j
-        j.pedir_truco('Ana')
-        j.responder_truco('Bob', 'aumentar')
-        j.responder_truco('Ana', 'aumentar')
-        j.responder_truco('Bob', 'aumentar')
-        j.responder_truco('Ana', 'aceitar')  # aceita 12
+        j.pedir_truco('Almodenga')
+        j.responder_truco('Baguga', 'aumentar')
+        j.responder_truco('Almodenga', 'aumentar')
+        j.responder_truco('Baguga', 'aumentar')
+        j.responder_truco('Almodenga', 'aceitar')  # aceita 12
         # não há mais truco para pedir
-        res = j.pedir_truco('Bob')
+        res = j.pedir_truco('Baguga')
         assert res['ok'] is False
 
     def test_mao_de_11_truco_perde_jogo(self):
         j = self.j
         j.placar[0] = 11
         j.iniciar_mao()
-        res = j.pedir_truco('Ana')  # dupla 0 tem 11, pede truco
+        res = j.pedir_truco('Almodenga')  # dupla 0 tem 11, pede truco
         assert res['ok'] is False
         assert res['jogo_encerrado'] is True
         assert res['dupla_vencedora_jogo'] == 1
@@ -373,7 +373,7 @@ class TestJogoCorrerMao11:
         j = _criar_jogo_normal()
         j.placar[0] = 11
         j.iniciar_mao()
-        res = j.correr_mao_de_11('Ana')
+        res = j.correr_mao_de_11('Almodenga')
         assert res['ok'] is True
         assert j.placar[1] == 1
 
@@ -381,13 +381,13 @@ class TestJogoCorrerMao11:
         j = _criar_jogo_normal()
         j.placar[0] = 11
         j.iniciar_mao()
-        res = j.correr_mao_de_11('Bob')  # Bob é dupla 1, não tem 11
+        res = j.correr_mao_de_11('Baguga')  # Baguga é dupla 1, não tem 11
         assert res['ok'] is False
 
     def test_correr_mao_de_11_nao_e_mao_de_11(self):
         j = _criar_jogo_normal()
         j.iniciar_mao()
-        res = j.correr_mao_de_11('Ana')
+        res = j.correr_mao_de_11('Almodenga')
         assert res['ok'] is False
 
 
@@ -415,7 +415,7 @@ class TestSerializacao:
     def test_serializa_truco_pendente(self):
         j = _criar_jogo_normal()
         j.iniciar_mao()
-        j.pedir_truco('Ana')
+        j.pedir_truco('Almodenga')
 
         d = j.para_dict()
         j2 = Jogo.de_dict(d)
