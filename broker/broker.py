@@ -171,6 +171,13 @@ def handle_cliente(cliente_conn, addr):
         def backend_para_cliente():
             for msg in _ler_mensagens(backend_conn):
                 _enviar(cliente_conn, msg)
+            # Backend encerrou a conexão (ex: kick por inatividade, ou
+            # o próprio backend caiu). Fecha também o lado do cliente,
+            # senão ele fica "pendurado" sem receber respostas.
+            try:
+                cliente_conn.close()
+            except OSError:
+                pass
 
         t = threading.Thread(target=backend_para_cliente, daemon=True)
         t.start()

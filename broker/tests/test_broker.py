@@ -2,6 +2,8 @@ import pytest
 import sys
 import os
 import json
+import socket
+import threading
 from unittest.mock import MagicMock, patch, call
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -258,3 +260,51 @@ class TestBancoPostgresBroker:
         _, params = mock_cur.execute.call_args.args
         assert params[1] == bp.hash_senha('senha123')
         assert 'senha123' not in params[1]
+
+
+# ------------------------------------------------------------------ #
+#  Regressão: broker não deve deixar o cliente "pendurado" quando o   #
+#  backend derruba a conexão dele (ex: kick por inatividade)          #
+# ------------------------------------------------------------------ #
+
+class TestFechaClienteQuandoBackendCai:
+    def test_cliente_conn_fecha_quando_backend_conn_cai(self):
+        cliente_conn, cliente_remoto = socket.socketpair()
+        backend_conn, backend_remoto = socket.socketpair()
+
+        with patch.object(broker, '_conectar_backend', return_value=backend_conn), \
+             patch('banco_postgres.autenticar', return_value=True):
+
+            t = threading.Thread(
+                target=broker.handle_cliente,
+                args=(cliente_conn, ('127.0.0.1', 0)),
+                daemon=True,
+            )
+            t.start()
+
+            cliente_remoto.sendall(
+                (json.dumps({'tipo': 'login', 'nome': 'Ana', 'senha': '123'}) + '\n').encode()
+            )
+
+            cliente_remoto.settimeout(2)
+            msg = json.loads(cliente_remoto.recv(4096).decode().strip())
+            assert msg['tipo'] == 'ok'
+            assert 'token' in msg
+
+            # Simula o backend derrubando a conexão deste jogador específico
+            backend_remoto.close()
+
+            # O broker deve perceber e fechar também o lado do cliente,
+            # em vez de deixá-lo esperando uma resposta que nunca chega.
+            cliente_remoto.settimeout(2)
+            dado = cliente_remoto.recv(4096)
+            assert dado == b''
+
+            t.join(2)
+
+        cliente_remoto.close()
+        for s in (backend_conn, backend_remoto, cliente_conn):
+            try:
+                s.close()
+            except OSError:
+                pass
