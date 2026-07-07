@@ -33,7 +33,7 @@ RODADAS_AFK_WO  = 2    # rodadas afk após reconexão para W.O.
 #  Estado global                                                      #
 # ------------------------------------------------------------------ #
 
-_lock              = threading.Lock()
+_lock              = threading.RLock()
 _salas             = {}
 _timers_turno      = {}   # sala_id  -> threading.Timer
 _timers_desconexao = {}   # nome     -> threading.Timer
@@ -215,18 +215,22 @@ def entrar_sala(nome, sala_id, conn):
         _cancelar_timer_desconexao(nome)
         enviar(conn, {'tipo': 'ok', 'mensagem': 'Reconectado!'})
         broadcast(sala_id, {'tipo': 'aviso', 'mensagem': f'{nome} reconectou!'}, exceto=nome)
-        if jogo:
-            estado = montar_estado_para(jogo, nome, sala_id)
-            enviar(conn, {'tipo': 'estado_jogo', 'dados': estado})
         # Retomar jogo se estava pausado esperando por este jogador
+        retomou = False
         with _lock:
             sala = _salas[sala_id]
             if sala['status'] == 'pausada' and jogo and jogo.jogador_da_vez() == nome:
                 sala['status'] = 'jogando'
                 jogo.status = 'jogando'
                 _salvar_jogo(sala_id)
-        broadcast(sala_id, {'tipo': 'aviso', 'mensagem': 'Jogo retomado!'})
-        _iniciar_timer_turno(sala_id, nome, TIMER_DECISAO)
+                retomou = True
+        if jogo:
+            enviar_estado_todos(sala_id)
+        if retomou:
+            # Se não estava pausado, o timer de quem está na vez continua
+            # valendo — não deve ser substituído.
+            broadcast(sala_id, {'tipo': 'aviso', 'mensagem': 'Jogo retomado!'})
+            _iniciar_timer_turno(sala_id, nome, TIMER_DECISAO)
         return sala_id
 
     enviar(conn, {'tipo': 'ok', 'mensagem': f'Entrou na Sala {sala_id}'})
@@ -307,6 +311,7 @@ def _jogar_carta(nome, sala_id, indice, coberta):
         return
 
     with _lock:
+        sala['afk_conta'].pop(nome, None)
         _salvar_jogo(sala_id)
 
     enviar_estado_todos(sala_id)
@@ -543,6 +548,20 @@ def _timeout_inatividade(sala_id, nome):
         if nome not in sala['conexoes']:
             return  # já desconectado, tratado em outro lugar
         conn = sala['conexoes'].get(nome)
+        ja_reconectou = nome in sala['ja_reconectou']
+
+    if ja_reconectou:
+        # Já usou a única reconexão permitida: não abre nova janela de
+        # reconexão, apenas conta como rodada AFK.
+        if _verificar_afk_wo(nome, sala_id):
+            return
+        broadcast(sala_id, {'tipo': 'aviso', 'mensagem': f'{nome} está inativo...'})
+        with _lock:
+            jogo = _salas[sala_id]['jogo']
+            proximo = jogo.jogador_da_vez() if jogo else None
+        if proximo:
+            _iniciar_timer_turno(sala_id, proximo, TIMER_JOGAR)
+        return
 
     # Desconectar por inatividade
     broadcast(sala_id, {'tipo': 'aviso', 'mensagem': f'{nome} foi removido por inatividade'})
@@ -558,6 +577,10 @@ def _timeout_inatividade(sala_id, nome):
 def _handle_desconexao(nome, sala_id):
     """Trata a desconexão de um jogador durante uma partida."""
     with _lock:
+        if nome in _timers_desconexao:
+            # Já tratada: o kick por inatividade fecha o socket, o que
+            # faz o handler da conexão chamar esta função de novo.
+            return
         sala = _salas[sala_id]
         sala['conexoes'].pop(nome, None)
         jogo = sala['jogo']
@@ -572,21 +595,20 @@ def _handle_desconexao(nome, sala_id):
         br.registrar_desconexao(_r, nome, sala_id)
         br.definir_ttl_estado(_r, sala_id, TIMER_RECONEXAO)
 
+        # Timer: se não reconectar em 60s → W.O.
+        def timeout_reconexao():
+            _timeout_sem_reconexao(nome, sala_id)
+
+        t = threading.Timer(TIMER_RECONEXAO, timeout_reconexao)
+        t.daemon = True
+        _timers_desconexao[nome] = t
+
+    t.start()
     broadcast(sala_id, {
         'tipo': 'desconexao',
         'jogador': nome,
         'tempo_restante': TIMER_RECONEXAO,
     })
-
-    # Timer: se não reconectar em 60s → W.O.
-    def timeout_reconexao():
-        _timeout_sem_reconexao(nome, sala_id)
-
-    t = threading.Timer(TIMER_RECONEXAO, timeout_reconexao)
-    t.daemon = True
-    with _lock:
-        _timers_desconexao[nome] = t
-    t.start()
 
     # Se era a vez do jogador desconectado → pausar o jogo
     with _lock:
@@ -610,6 +632,7 @@ def _cancelar_timer_desconexao(nome):
 def _timeout_sem_reconexao(nome, sala_id):
     """Jogador não reconectou a tempo → W.O."""
     with _lock:
+        _timers_desconexao.pop(nome, None)
         sala = _salas[sala_id]
         if nome not in sala['jogadores']:
             return
@@ -659,6 +682,11 @@ def _encerrar_jogo(sala_id, dupla_vencedora, motivo):
 
         if jogo is None:
             return
+
+    # Timers de desconexão pendentes não devem sobreviver ao fim da
+    # partida (a sala é reiniciada e pode receber uma partida nova)
+    for n in jogadores:
+        _cancelar_timer_desconexao(n)
 
     vencedores = [n for n in jogadores if jogo.duplas.get(n) == dupla_vencedora]
     perdedores  = [n for n in jogadores if jogo.duplas.get(n) != dupla_vencedora]
